@@ -775,6 +775,10 @@ class MambaSplitConv1dScanCombinedFn(torch.autograd.Function):
         assert A.shape == (nheads,)
         zx0, z, xBC, dt = torch.split(zxbcdt, [2 * d_nonssm, dim, dim + ngroups * dstate * 2, nheads], dim=-1)
         seq_idx = seq_idx.contiguous() if seq_idx is not None else None
+
+        # Explicitly reallocate memory to force correct alignment
+        xBC = torch.empty_like(xBC, memory_format=torch.contiguous_format).copy_(xBC)
+
         xBC_conv = rearrange(
             causal_conv1d_cuda.causal_conv1d_fwd(rearrange(xBC, "b s d -> b d s"),
                                                  conv1d_weight, conv1d_bias, seq_idx, None, None, activation in ["silu", "swish"]),
