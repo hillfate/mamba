@@ -1,0 +1,39 @@
+name: samba_env
+channels:
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - pytorch
+  - torchvision
+  - torchaudio
+  - pytorch-cuda=12.2
+  - pip:
+      - --upgrade pip
+      - azureml-mlflow
+      - tensorboard
+      - xformers --index-url https://download.pytorch.org/whl/cu121
+      - packaging
+      - torch>=2.1.0dev
+      - lightning==2.1.2
+      - lightning[app]
+      - jsonargparse[signatures]
+      - tokenizers
+      - sentencepiece
+      - wandb
+      - lightning[data]
+      - torchmetrics
+      - tensorboard
+      - zstandard
+      - pandas
+      - pyarrow
+      - huggingface_hub
+      - flash-attn --no-build-isolation
+      - causal-conv1d
+      - mamba-ssm
+      - --index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/Triton-Nightly/pypi/simple/ triton-nightly
+      - einops
+      - opt_einsum
+      - git+https://github.com/sustcsonglin/flash-linear-attention@98c176e

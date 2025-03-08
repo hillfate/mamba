@@ -39,8 +39,8 @@ print(f"Number of parameters: {sum(p.numel() for p in model.parameters() if p.re
 
 # Load dataset
 print("Loading dataset...")
-dataset = load_dataset("wikitext", "wikitext-2-v1", split="validation")
-# dataset = load_dataset("allenai/c4", "realnewslike", split="validation[:10%]")
+# dataset = load_dataset("wikitext", "wikitext-2-v1", split="validation")
+dataset = load_dataset("allenai/c4", "realnewslike", split="validation[:10%]")
 
 # Function to compute perplexity
 def compute_perplexity(text):
