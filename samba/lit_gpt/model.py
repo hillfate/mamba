@@ -19,7 +19,7 @@ from torch import Tensor
 from .mamba_simple import Mamba
 from functools import partial
 try:
-    from mamba_ssm.ops.triton.layernorm import RMSNorm, layer_norm_fn, rms_norm_fn
+    from mamba_ssm.ops.triton.layer_norm import RMSNorm, layer_norm_fn, rms_norm_fn
 except ImportError:
     RMSNorm, layer_norm_fn, rms_norm_fn = None, None, None
 from .gla import GatedLinearAttention
