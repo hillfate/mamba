@@ -97,11 +97,11 @@ class Mamba_bigram(nn.Module):
     def bigram_embedding(self, h):
         """Applies bigram embedding (half from previous, half from current)."""
         s = h.size()
-        h = h.view(s[0], -1)
+        h = h.reshape(s[0], -1)  
         d2 = s[2] // 2  # Half of embedding dimension
         h = h.roll(d2, 1)  # Shift right by `d2`
         h[:, :d2] = 0  # Zero out first part to prevent garbage values
-        h = h.view(*s)  # Restore shape
+        h = h.reshape(*s)  # Restore shape
         return h
 
     def forward(self, hidden_states, inference_params=None):
@@ -109,6 +109,7 @@ class Mamba_bigram(nn.Module):
         hidden_states: (B, L, D)
         Returns: same shape as hidden_states
         """
+        # print(f"[INFO] Using MambaBigram: {hidden_states.shape}")
         batch, seqlen, dim = hidden_states.shape
 
         # We do matmul and transpose BLH -> HBL at the same time
