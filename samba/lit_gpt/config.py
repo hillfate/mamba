@@ -1002,4 +1002,21 @@ mamba = [
 ]
 configs.extend(mamba)
 
+bigram = [
+    dict(
+        name="bigram_Mamba_430M", # check its actual size since we removed conv layers
+        mamba = True,
+        block_size=4096,
+        padding_multiple=64,
+        n_layer = 60,
+        vocab_size = 32000,
+        n_embd = 1024,
+        norm_eps=1e-5,
+        rms_norm = True,
+        residual_in_fp32 = True,
+        fused_add_norm = True,
+    ),
+]
+configs.extend(bigram)
+
 name_to_config = {config["name"]: config for config in configs}
