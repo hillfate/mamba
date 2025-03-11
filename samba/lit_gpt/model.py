@@ -16,7 +16,8 @@ from lit_gpt.config import Config
 from xformers.ops import SwiGLU
 from .fused_rotary_embedding import apply_rotary_emb_func
 from torch import Tensor
-from .mamba_simple import Mamba
+# from .mamba_simple import Mamba
+from .bigram_mamba_simple import Mamba_bigram as Mamba
 from functools import partial
 try:
     from mamba_ssm.ops.triton.layer_norm import RMSNorm, layer_norm_fn, rms_norm_fn
