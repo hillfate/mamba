@@ -3,10 +3,21 @@ import torch.nn as nn
 import math
 import os
 import json
+import random
 import zstandard as zstd
 from pathlib import Path
 from transformers import AutoTokenizer
 from lit_gpt.model import GPT, Config
+
+import logging
+from datetime import datetime
+
+# --- Configure Logging ---
+logging.basicConfig(
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+    datefmt="%Y-%m-%d %H:%M:%S",  # Custom datetime format
+)
 
 # --- CONFIGURATION ---
 CHECKPOINT_PATH = "/network/rit/lab/yinlab/ydeng/results/mambaResults/sam_mamba/out/tsz512x4k_20B_bigram_Mamba_430M/iter-144000-ckpt.pth"  
@@ -31,14 +42,32 @@ tokenizer_name = "meta-llama/Llama-2-7b"
 tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, trust_remote_code=True)
 tokenizer.pad_token_id = tokenizer.eos_token_id
 
-# --- Get List of All `.jsonl.zst` Files ---
-def get_jsonl_zst_files(dataset_path):
+# # --- Get List of All `.jsonl.zst` Files ---
+# def get_jsonl_zst_files(dataset_path):
+#     files = []
+#     for chunk in sorted(os.listdir(dataset_path)):  # Iterate through validation chunks
+#         chunk_path = os.path.join(dataset_path, chunk)
+#         if os.path.isdir(chunk_path):  # Ensure it's a folder
+#             files.extend(sorted(Path(chunk_path).glob("*.jsonl.zst")))  # Find all `.jsonl.zst` files
+#     return files
+
+# --- Get List of 1000 Randomly Sampled `.jsonl.zst` Files ---
+def get_jsonl_zst_files(dataset_path, sample_size=1000, seed=42):
+    """Fetch all `.jsonl.zst` files and randomly sample `sample_size` of them."""
     files = []
     for chunk in sorted(os.listdir(dataset_path)):  # Iterate through validation chunks
         chunk_path = os.path.join(dataset_path, chunk)
         if os.path.isdir(chunk_path):  # Ensure it's a folder
             files.extend(sorted(Path(chunk_path).glob("*.jsonl.zst")))  # Find all `.jsonl.zst` files
-    return files
+
+    # Ensure we do not sample more than available files
+    sample_size = min(sample_size, len(files))
+
+    # Randomly sample `sample_size` files
+    random.seed(seed)  # Ensure reproducibility
+    sampled_files = random.sample(files, k=sample_size)
+
+    return sampled_files
 
 jsonl_zst_files = get_jsonl_zst_files(SLIMPAJAMA_PATH)
 
@@ -67,8 +96,8 @@ def compute_perplexity(model, files, tokenizer, device, max_length):
     with torch.no_grad():
         for idx, file_path in enumerate(files):
             # Print every 100th file
-            if idx % 100 == 0:
-                print(f"Processing file {idx+1}/{len(files)}: {file_path} at context length {max_length}...")
+            if idx % 10 == 0:
+                logging.info(f"Processing file {idx+1}/{len(files)}: {file_path} at context length {max_length}")
 
             for json_obj in read_jsonl_zst(file_path):
                 text = json_obj["text"]  # Extract raw text
