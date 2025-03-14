@@ -92,19 +92,39 @@ def compute_perplexity(model, files, tokenizer, device, max_length):
     loss_fn = nn.CrossEntropyLoss(ignore_index=tokenizer.pad_token_id, reduction="sum")
     total_loss = 0.0
     total_tokens = 0
+    total_real_tokens = 0  # Tracks only non-padding tokens
 
     with torch.no_grad():
         for idx, file_path in enumerate(files):
             # Print every 100th file
-            if idx % 10 == 0:
+            if idx % 100 == 0:
                 logging.info(f"Processing file {idx+1}/{len(files)}: {file_path} at context length {max_length}")
 
+            # MIN_LENGTH_FACTOR = 0.75  # Keep at least 75% of context length
+
             for json_obj in read_jsonl_zst(file_path):
-                text = json_obj["text"]  # Extract raw text
+                text = json_obj["text"]
+
+                # Tokenize without padding to measure actual length
+                encoded_raw = tokenizer(text, return_tensors="pt", truncation=True, max_length=max_length, padding=False)
+                # real_length = encoded_raw["input_ids"].shape[1]
+
+                # # Compute dynamic min length threshold (e.g., 75% of context length)
+                # min_required_length = int(max_length * MIN_LENGTH_FACTOR)
+
+                # # Skip texts shorter than 75% of context length
+                # if real_length < min_required_length:
+                #     logging.info(f"Skipping text with {real_length} tokens (too short for context {max_length})")
+                #     continue
 
                 # Tokenize
-                encoded = tokenizer(text, return_tensors="pt", truncation=True, max_length=max_length, padding="max_length")
-                input_ids = encoded["input_ids"].to(device)
+                # encoded = tokenizer(text, return_tensors="pt", truncation=True, max_length=max_length, padding="max_length")
+                input_ids = encoded_raw["input_ids"].to(device)
+
+                # Count non-padding tokens
+                real_token_mask = input_ids != tokenizer.pad_token_id  # Mask: True for real tokens, False for padding
+                num_real_tokens = real_token_mask.sum().item()  # Count real tokens
+                total_real_tokens += num_real_tokens  # Update global counter
 
                 # Ensure labels are correctly aligned
                 input_tokens = input_ids[:, :-1].contiguous()  # Remove last token from inputs
@@ -118,18 +138,33 @@ def compute_perplexity(model, files, tokenizer, device, max_length):
                 # Compute loss
                 loss = loss_fn(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
                 total_loss += loss.item()
-                total_tokens += shift_labels.numel()
+                total_tokens += shift_labels.numel()  # This includes padding tokens
 
+    # Compute loss per token
     avg_loss = total_loss / total_tokens
     perplexity = math.exp(avg_loss)
-    return perplexity
+
+    # Compute loss considering only real tokens (no padding)
+    avg_real_loss = total_loss / total_real_tokens
+    real_ppl = math.exp(avg_real_loss)
+
+    # Log information about padding bias
+    logging.info(f"Max Length: {max_length} | Total Tokens: {total_tokens} | Non-Pad Tokens: {total_real_tokens}")
+    logging.info(f"Regular Perplexity: {perplexity:.4f} | Real Token Perplexity: {real_ppl:.4f}")
+
+    return avg_loss, perplexity, avg_real_loss, real_ppl
 
 # --- Run Perplexity Evaluation ---
 if __name__ == "__main__":
     print("Loading model...")
     model = load_model(CHECKPOINT_PATH, CONFIG_NAME, DEVICE, DTYPE)
 
+    # for context_length in CONTEXT_LENGTHS:
+    #     print(f"Computing Perplexity at Context Length {context_length}...")
+    #     ppl = compute_perplexity(model, jsonl_zst_files, tokenizer, DEVICE, max_length=context_length)
+    #     print(f"Perplexity on SlimPajama (Context Length {context_length}): {ppl:.4f}")
+
     for context_length in CONTEXT_LENGTHS:
         print(f"Computing Perplexity at Context Length {context_length}...")
-        ppl = compute_perplexity(model, jsonl_zst_files, tokenizer, DEVICE, max_length=context_length)
-        print(f"Perplexity on SlimPajama (Context Length {context_length}): {ppl:.4f}")
+        avg_loss, ppl, avg_real_loss, real_ppl = compute_perplexity(model, jsonl_zst_files, tokenizer, DEVICE, max_length=context_length)
+        print(f"Perplexity on SlimPajama (Context Length {context_length}): {ppl:.4f} | Real Token PPL: {real_ppl:.4f}")
