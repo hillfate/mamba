@@ -111,6 +111,7 @@ class Mamba_bigram(nn.Module):
         """
         # print(f"[INFO] Using MambaBigram: {hidden_states.shape}")
         batch, seqlen, dim = hidden_states.shape
+        hidden_states = self.bigram_embedding(hidden_states)  # Apply bigram mixing instead of conv1d
 
         # We do matmul and transpose BLH -> HBL at the same time
         xz = rearrange(
@@ -124,9 +125,6 @@ class Mamba_bigram(nn.Module):
         A = -torch.exp(self.A_log.float())  # (d_inner, d_state)
 
         x, z = xz.chunk(2, dim=1)
-
-        # **Replace conv1d with bigram embedding**
-        x = self.bigram_embedding(x)  # Apply bigram mixing instead of conv1d
 
         # Continue with the rest of Mamba forward pass
         x_dbl = self.x_proj(rearrange(x, "b d l -> (b l) d"))  # (bl d)
