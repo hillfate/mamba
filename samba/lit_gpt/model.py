@@ -171,11 +171,24 @@ class GPT(nn.Module):
             self.rope_cache = None
             self.mask_cache = None
 
+            
+    def bigram_embedding(self, h):
+        """Applies bigram embedding (half from previous, half from current)."""
+        s = h.size()
+        h = h.reshape(s[0], -1)  
+        d2 = s[2] // 2  
+        h = h.roll(d2, 1) 
+        h[:, :d2] = 0  
+        h = h.reshape(*s)  
+        return h
+    
+
     def forward(
         self, idx: torch.Tensor, max_seq_length: Optional[int] = None, input_pos: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
         if self.config.mamba:
             hidden_states = self.transformer.wte(idx)
+            hidden_states = self.bigram_embedding(hidden_states)
             residual = None
             for block in self.transformer.h:
                 hidden_states, residual = block(
