@@ -30,7 +30,9 @@ from lit_gpt import FusedCrossEntropyLoss
 import random
 import os
 
-model_name = "bigram_Mamba_430M" # change to "Samba_1.3B" for 1.3B model
+# os.environ["WANDB_MODE"] = "disabled"
+
+model_name = "bigram_conv_Mamba_430M" # change to "Samba_1.3B" for 1.3B model
 train_config = "tsz512x4k_20B" # chanage to "tsz512x4k_100B" for 1.3B model
 name = train_config +"_" + model_name
 
@@ -68,10 +70,10 @@ elif "1024x2k" in name:
     global_batch_size = 1024 // nodes
     micro_batch_size = 16
     
-learning_rate = 2e-4
+learning_rate = 4e-4
 
 total_evals = 400
-warmup_tokens = int(max_tokens * 0.1)
+warmup_tokens = int(max_tokens * 0.01)
 log_step_interval = 10
 eval_iters = total_evals // micro_batch_size # 50 # 25
 save_step_interval = 1000
@@ -104,7 +106,7 @@ val_data_config = [
 
 hparams = {k: v for k, v in locals().items() if isinstance(v, (int, float, str)) and not k.startswith("_")}
 
-wandb_logger = WandbLogger(project="pretrain-LLM", name="bigram_Mamba_430M_tsz512x4k_20B_maxlr2e-4_warmup10percent")
+wandb_logger = WandbLogger(project="pretrain-LLM", name="bigram_conv_Mamba_430M_tsz512x4k_20B")
 
 
 def setup(
@@ -390,35 +392,35 @@ def create_dataloaders(
     return train_dataloader, val_dataloader
 
 
-# # learning rate decay scheduler (cosine with linear warmup)
-# def get_lr(it: int, warmup_iters: int, max_iters: int) -> float:
-#     # 1) linear warmup for warmup_iters steps
-#     if it < warmup_iters:
-#         return learning_rate * it / warmup_iters
-#     # 2) if it > max_iters, return min learning rate
-#     if it > max_iters:
-#         return min_lr
-#     # 3) in between, use cosine decay down to min learning rate
-#     decay_ratio = (it - warmup_iters) / (max_iters - warmup_iters)
-#     assert 0 <= decay_ratio <= 1
-#     coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio))  # coeff ranges 0..1
-#     return min_lr + coeff * (learning_rate - min_lr)
-
-
+# learning rate decay scheduler (cosine with linear warmup)
 def get_lr(it: int, warmup_iters: int, max_iters: int) -> float:
-    # 1) Extend warmup (10% of total steps)
+    # 1) linear warmup for warmup_iters steps
     if it < warmup_iters:
         return learning_rate * it / warmup_iters
-
-    # 2) If past max_iters, return min learning rate
+    # 2) if it > max_iters, return min learning rate
     if it > max_iters:
         return min_lr
-
-    # 3) Adjust cosine decay for smoother transitions
+    # 3) in between, use cosine decay down to min learning rate
     decay_ratio = (it - warmup_iters) / (max_iters - warmup_iters)
     assert 0 <= decay_ratio <= 1
-    coeff = 0.75 * (1.0 + math.cos(math.pi * decay_ratio))  # Softer decay
+    coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio))  # coeff ranges 0..1
     return min_lr + coeff * (learning_rate - min_lr)
+
+
+# def get_lr(it: int, warmup_iters: int, max_iters: int) -> float:
+#     # 1) Extend warmup (10% of total steps)
+#     if it < warmup_iters:
+#         return learning_rate * it / warmup_iters
+
+#     # 2) If past max_iters, return min learning rate
+#     if it > max_iters:
+#         return min_lr
+
+#     # 3) Adjust cosine decay for smoother transitions
+#     decay_ratio = (it - warmup_iters) / (max_iters - warmup_iters)
+#     assert 0 <= decay_ratio <= 1
+#     coeff = 0.75 * (1.0 + math.cos(math.pi * decay_ratio))  # Softer decay
+#     return min_lr + coeff * (learning_rate - min_lr)
 
 
 
