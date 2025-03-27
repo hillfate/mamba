@@ -16,8 +16,8 @@ from lit_gpt.config import Config
 from xformers.ops import SwiGLU
 from .fused_rotary_embedding import apply_rotary_emb_func
 from torch import Tensor
-# from .mamba_simple import Mamba
-from .bigram_mamba_simple import Mamba_bigram as Mamba
+from .mamba_simple import Mamba
+# from .bigram_mamba_simple import Mamba_bigram as Mamba
 from functools import partial
 try:
     from mamba_ssm.ops.triton.layer_norm import RMSNorm, layer_norm_fn, rms_norm_fn
@@ -172,15 +172,15 @@ class GPT(nn.Module):
             self.mask_cache = None
 
             
-    def bigram_embedding(self, h):
-        """Applies bigram embedding (half from previous, half from current)."""
-        s = h.size()
-        h = h.reshape(s[0], -1)  
-        d2 = s[2] // 2  
-        h = h.roll(d2, 1) 
-        h[:, :d2] = 0  
-        h = h.reshape(*s)  
-        return h
+    # def bigram_embedding(self, h):
+    #     """Applies bigram embedding (half from previous, half from current)."""
+    #     s = h.size()
+    #     h = h.reshape(s[0], -1)  
+    #     d2 = s[2] // 2  
+    #     h = h.roll(d2, 1) 
+    #     h[:, :d2] = 0  
+    #     h = h.reshape(*s)  
+    #     return h
     
 
     def forward(
@@ -188,7 +188,7 @@ class GPT(nn.Module):
     ) -> torch.Tensor:
         if self.config.mamba:
             hidden_states = self.transformer.wte(idx)
-            hidden_states = self.bigram_embedding(hidden_states)
+            # hidden_states = self.bigram_embedding(hidden_states)
             residual = None
             for block in self.transformer.h:
                 hidden_states, residual = block(
