@@ -109,15 +109,6 @@ class Mamba(nn.Module):
 
         self.out_proj = nn.Linear(self.d_inner, self.d_model, bias=bias, **factory_kwargs)
 
-    def bigram_embedding(self, h):
-        """Applies bigram embedding (half from previous, half from current)."""
-        s = h.size()
-        h = h.reshape(s[0], -1)  
-        d2 = s[2] // 2  # Half of embedding dimension
-        h = h.roll(d2, 1)  # Shift right by `d2`
-        h[:, :d2] = 0  # Zero out first part to prevent garbage values
-        h = h.reshape(*s)  # Restore shape
-        return h
 
     def forward(self, hidden_states, inference_params=None):
         """
@@ -125,7 +116,6 @@ class Mamba(nn.Module):
         Returns: same shape as hidden_states
         """
         batch, seqlen, dim = hidden_states.shape
-        hidden_states = self.bigram_embedding(hidden_states)
 
         conv_state, ssm_state = None, None
         if inference_params is not None:
