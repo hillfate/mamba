@@ -40,7 +40,7 @@ class Mamba(nn.Module):
         dt_init_floor=1e-4,
         conv_bias=True,
         bias=False,
-        use_fast_path=True,  # Fused kernel options
+        use_fast_path=False,  # Fused kernel options
         layer_idx=None,
         device=None,
         dtype=None,
@@ -131,8 +131,6 @@ class Mamba(nn.Module):
         Returns: same shape as hidden_states
         """
         batch, seqlen, dim = hidden_states.shape
-        if self.layer_id in self.use_bigram_layers:
-            hidden_states = self.bigram_embedding(hidden_states)
 
         conv_state, ssm_state = None, None
         if inference_params is not None:
@@ -213,6 +211,8 @@ class Mamba(nn.Module):
                 y, last_state = y
                 ssm_state.copy_(last_state)
             y = rearrange(y, "b d l -> b l d")
+            if self.layer_id in self.use_bigram_layers:
+                y = self.bigram_embedding(y)
             out = self.out_proj(y)
         return out
 
