@@ -41,29 +41,44 @@ KVCache = Tuple[torch.Tensor, torch.Tensor]
 FlashAttention2Available = RequirementCache("flash-attn>=2.0.0.post1")
 
 def create_block(
-    d_model,
+    d_model, 
     ssm_cfg=None,
     norm_epsilon=1e-5,
     rms_norm=False,
     residual_in_fp32=False,
     fused_add_norm=False,
     layer_idx=None,
+    use_bigram_layers=None,
     device=None,
     dtype=None,
 ):
     if ssm_cfg is None:
         ssm_cfg = {}
+
     factory_kwargs = {"device": device, "dtype": dtype}
-    mixer_cls = partial(Mamba, layer_idx=layer_idx, **ssm_cfg, **factory_kwargs)
-    norm_cls = partial(
-        nn.LayerNorm if not rms_norm else RMSNorm, eps=norm_epsilon, **factory_kwargs
+    
+    mixer_cls = partial(
+        Mamba,
+        layer_idx=layer_idx,
+        use_bigram_layers=use_bigram_layers,
+        **ssm_cfg,
+        **factory_kwargs,
     )
+
+    norm_cls = partial(
+        nn.LayerNorm if not rms_norm else RMSNorm,
+        eps=norm_epsilon,
+        **factory_kwargs,
+    )
+
     block = MBlock(
         d_model,
         mixer_cls,
         norm_cls=norm_cls,
         fused_add_norm=fused_add_norm,
         residual_in_fp32=residual_in_fp32,
+        layer_id=layer_idx,
+        use_bigram_layers=use_bigram_layers,
     )
     block.layer_idx = layer_idx
     return block
@@ -81,6 +96,8 @@ class GPT(nn.Module):
                 if layer_norm_fn is None or rms_norm_fn is None:
                     raise ImportError("Failed to import Triton LayerNorm / RMSNorm kernels")
 
+            use_bigram_layers = [0] # Layers to use bigram embedding before in_proj
+            print(f"[INFO] Bigram embedding will be used in layers: {use_bigram_layers}")
             self.transformer = nn.ModuleDict(
                 dict(
                     wte=nn.Embedding(config.padded_vocab_size, config.n_embd),
@@ -93,6 +110,7 @@ class GPT(nn.Module):
                             residual_in_fp32=config.residual_in_fp32,
                             fused_add_norm=config.fused_add_norm,
                             layer_idx=i,
+                            use_bigram_layers=use_bigram_layers,
                             **factory_kwargs,
                         )
                         for i in range(config.n_layer)),
@@ -172,15 +190,15 @@ class GPT(nn.Module):
             self.mask_cache = None
 
             
-    # def bigram_embedding(self, h):
-    #     """Applies bigram embedding (half from previous, half from current)."""
-    #     s = h.size()
-    #     h = h.reshape(s[0], -1)  
-    #     d2 = s[2] // 2  
-    #     h = h.roll(d2, 1) 
-    #     h[:, :d2] = 0  
-    #     h = h.reshape(*s)  
-    #     return h
+    def bigram_embedding(self, h):
+        """Applies bigram embedding (half from previous, half from current)."""
+        s = h.size()
+        h = h.reshape(s[0], -1)  
+        d2 = s[2] // 2  
+        h = h.roll(d2, 1) 
+        h[:, :d2] = 0  
+        h = h.reshape(*s)  
+        return h
     
 
     def forward(
@@ -256,6 +274,7 @@ class GPT(nn.Module):
             rope = (cos, sin)
         # forward the model itself
         x = self.transformer.wte(idx)  # token embeddings of shape (b, t, n_embd)
+        # x = self.bigram_embedding(x)
             
         if not use_kv_cache:
             for block in self.transformer.h:
@@ -403,7 +422,8 @@ class Block(nn.Module):
 
 class MBlock(nn.Module):
     def __init__(
-        self, dim, mixer_cls, norm_cls=nn.LayerNorm, fused_add_norm=False, residual_in_fp32=False
+        self, dim, mixer_cls, norm_cls=nn.LayerNorm, fused_add_norm=False, residual_in_fp32=False, layer_id=0,
+        use_bigram_layers=None,
     ):
         """
         Simple block wrapping a mixer class with LayerNorm/RMSNorm and residual connection"
@@ -420,8 +440,10 @@ class MBlock(nn.Module):
         super().__init__()
         self.residual_in_fp32 = residual_in_fp32
         self.fused_add_norm = fused_add_norm
-        self.mixer = mixer_cls(dim)
         self.norm = norm_cls(dim)
+        
+        use_bigram_layers = use_bigram_layers or []
+        self.mixer = mixer_cls(dim, layer_id=layer_id, use_bigram_layers=use_bigram_layers)
         if self.fused_add_norm:
             assert RMSNorm is not None, "RMSNorm import fails"
             assert isinstance(
