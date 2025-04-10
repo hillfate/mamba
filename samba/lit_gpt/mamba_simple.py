@@ -27,6 +27,8 @@ class Mamba(nn.Module):
     def __init__(
         self,
         d_model,
+        layer_id, 
+        use_bigram_layers=None,
         d_state=16,
         d_conv=4,
         expand=2,
@@ -45,6 +47,8 @@ class Mamba(nn.Module):
     ):
         factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
+        self.layer_id = layer_id
+        self.use_bigram_layers = use_bigram_layers or []
         self.d_model = d_model
         self.d_state = d_state
         self.d_conv = d_conv
@@ -109,6 +113,17 @@ class Mamba(nn.Module):
 
         self.out_proj = nn.Linear(self.d_inner, self.d_model, bias=bias, **factory_kwargs)
 
+        
+    def bigram_embedding(self, h):
+        """Applies bigram embedding (half from previous, half from current)."""
+        s = h.size()
+        h = h.reshape(s[0], -1)  
+        d2 = s[2] // 2  
+        h = h.roll(d2, 1)  
+        h[:, :d2] = 0  
+        h = h.reshape(*s)  
+        return h    
+
 
     def forward(self, hidden_states, inference_params=None):
         """
@@ -116,6 +131,8 @@ class Mamba(nn.Module):
         Returns: same shape as hidden_states
         """
         batch, seqlen, dim = hidden_states.shape
+        if self.layer_id in self.use_bigram_layers:
+            hidden_states = self.bigram_embedding(hidden_states)
 
         conv_state, ssm_state = None, None
         if inference_params is not None:
