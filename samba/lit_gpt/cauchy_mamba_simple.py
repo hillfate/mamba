@@ -42,8 +42,12 @@ class CauchyActivation(nn.Module):
         self.d = nn.Parameter(Tensor([d]))
 
     def forward(self, input: Tensor, *args, **kwargs) -> Tensor:
-        denominator = input ** 2 + self.d ** 2
-        return (self.lambda1 * input) / denominator + self.lambda2 / denominator
+        lambda1 = self.lambda1.to(dtype=input.dtype)
+        lambda2 = self.lambda2.to(dtype=input.dtype)
+        d = self.d.to(dtype=input.dtype)
+
+        denominator = input ** 2 + d ** 2
+        return (lambda1 * input) / denominator + lambda2 / denominator
 
     def profile_module(
         self, input: Tensor, *args, **kwargs
@@ -205,7 +209,7 @@ class Mamba(nn.Module):
                 # If we just take x[:, :, -self.d_conv :], it will error if seqlen < self.d_conv
                 # Instead F.pad will pad with zeros if seqlen < self.d_conv, and truncate otherwise.
                 conv_state.copy_(F.pad(x, (self.d_conv - x.shape[-1], 0)))  # Update state (B D W)
-            print(f"[INFO] Using Activation: {self.activation}")
+            # print(f"[INFO] Using Activation: {self.activation}")
             x = self.act(self.conv1d(x)[..., :seqlen])
             # if causal_conv1d_fn is None:
             #     x = self.act(self.conv1d(x)[..., :seqlen])
@@ -228,15 +232,22 @@ class Mamba(nn.Module):
             B = rearrange(B, "(b l) dstate -> b dstate l", l=seqlen).contiguous()
             C = rearrange(C, "(b l) dstate -> b dstate l", l=seqlen).contiguous()
             # assert self.activation in ["silu", "swish"]
+            dt = dt.to(x.dtype)
+            A = A.to(x.dtype)
+            B = B.to(x.dtype)
+            C = C.to(x.dtype)
+            D = self.D.to(x.dtype)
+            z = z.to(x.dtype)
+            dt_proj_bias = self.dt_proj.bias.to(dtype=x.dtype)
             y = selective_scan_fn(
                 x,
                 dt,
                 A,
                 B,
                 C,
-                self.D.float(),
+                D,
                 z=z,
-                delta_bias=self.dt_proj.bias.float(),
+                delta_bias=dt_proj_bias,
                 delta_softplus=True,
                 return_last_state=ssm_state is not None,
             )
