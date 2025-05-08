@@ -29,8 +29,9 @@ class Mamba_bigram(nn.Module):
         dt_scale=1.0,
         dt_init_floor=1e-4,
         bias=False,
-        use_fast_path=True,
+        use_fast_path=False,
         layer_idx=None,
+        use_bigram_layers=None,
         device=None,
         dtype=None,
     ):
@@ -150,7 +151,6 @@ class Mamba_bigram(nn.Module):
         """
         # print(f"[INFO] Using MambaBigram: {hidden_states.shape}")
         batch, seqlen, dim = hidden_states.shape
-        hidden_states = self.quagram_concat(hidden_states)  # Apply bigram mixing instead of conv1d
 
         # We do matmul and transpose BLH -> HBL at the same time
         xz = rearrange(
@@ -187,5 +187,6 @@ class Mamba_bigram(nn.Module):
         )
 
         y = rearrange(y, "b d l -> b l d")
+        y = self.bigram_embedding(y)  # Apply bigram embedding
         out = self.out_proj(y)
         return out
