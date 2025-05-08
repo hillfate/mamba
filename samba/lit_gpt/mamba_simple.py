@@ -27,7 +27,6 @@ class Mamba(nn.Module):
     def __init__(
         self,
         d_model,
-        layer_id, 
         use_bigram_layers=None,
         d_state=16,
         d_conv=4,
@@ -47,7 +46,6 @@ class Mamba(nn.Module):
     ):
         factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
-        self.layer_id = layer_id
         self.use_bigram_layers = use_bigram_layers or []
         self.d_model = d_model
         self.d_state = d_state
