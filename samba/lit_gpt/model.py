@@ -16,8 +16,9 @@ from lit_gpt.config import Config
 from xformers.ops import SwiGLU
 from .fused_rotary_embedding import apply_rotary_emb_func
 from torch import Tensor
-from .mamba_simple import Mamba
+# from .mamba_simple import Mamba
 # from .bigram_mamba_simple import Mamba_bigram as Mamba
+from .cauchy_mamba_simple import Mamba
 from functools import partial
 try:
     from mamba_ssm.ops.triton.layer_norm import RMSNorm, layer_norm_fn, rms_norm_fn
@@ -77,7 +78,7 @@ def create_block(
         norm_cls=norm_cls,
         fused_add_norm=fused_add_norm,
         residual_in_fp32=residual_in_fp32,
-        layer_id=layer_idx,
+        layer_idx=layer_idx,
         use_bigram_layers=use_bigram_layers,
     )
     block.layer_idx = layer_idx
@@ -96,7 +97,7 @@ class GPT(nn.Module):
                 if layer_norm_fn is None or rms_norm_fn is None:
                     raise ImportError("Failed to import Triton LayerNorm / RMSNorm kernels")
 
-            use_bigram_layers = [0] # Layers to use bigram embedding before in_proj
+            use_bigram_layers = None # Layers to use bigram embedding before in_proj
             print(f"[INFO] Bigram embedding will be used in layers: {use_bigram_layers}")
             self.transformer = nn.ModuleDict(
                 dict(
@@ -422,7 +423,7 @@ class Block(nn.Module):
 
 class MBlock(nn.Module):
     def __init__(
-        self, dim, mixer_cls, norm_cls=nn.LayerNorm, fused_add_norm=False, residual_in_fp32=False, layer_id=0,
+        self, dim, mixer_cls, norm_cls=nn.LayerNorm, fused_add_norm=False, residual_in_fp32=False, layer_idx=0,
         use_bigram_layers=None,
     ):
         """
@@ -443,7 +444,7 @@ class MBlock(nn.Module):
         self.norm = norm_cls(dim)
         
         use_bigram_layers = use_bigram_layers or []
-        self.mixer = mixer_cls(dim, layer_id=layer_id, use_bigram_layers=use_bigram_layers)
+        self.mixer = mixer_cls(dim, layer_idx=layer_idx, use_bigram_layers=use_bigram_layers)
         if self.fused_add_norm:
             assert RMSNorm is not None, "RMSNorm import fails"
             assert isinstance(
