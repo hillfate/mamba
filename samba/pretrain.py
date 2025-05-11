@@ -32,9 +32,9 @@ import os
 
 # os.environ["WANDB_MODE"] = "disabled"
 
-model_name = "bigram_conv_Mamba_430M" # change to "Samba_1.3B" for 1.3B model
+model_name = "Mamba_430M" # change to "Samba_1.3B" for 1.3B model
 train_config = "tsz512x4k_20B" # chanage to "tsz512x4k_100B" for 1.3B model
-name = train_config +"_" + model_name
+name = train_config +"_" + model_name + "negativeDef_x_proj"
 
 out_dir = Path(os.getenv("LIGHTNING_ARTIFACTS_DIR", "out")) / name
 devices = torch.cuda.device_count() or 1
@@ -52,7 +52,7 @@ elif "100B" in name:
 if "512x4k" in name:
     #4k
     global_batch_size = 512 // nodes
-    micro_batch_size = 4 
+    micro_batch_size = 8 
 elif "256x8k" in name:
     #8k
     global_batch_size = 256 // nodes
@@ -106,7 +106,7 @@ val_data_config = [
 
 hparams = {k: v for k, v in locals().items() if isinstance(v, (int, float, str)) and not k.startswith("_")}
 
-wandb_logger = WandbLogger(project="pretrain-LLM", name="bigram_conv_Mamba_430M_tsz512x4k_20B")
+wandb_logger = WandbLogger(project="pretrain-LLM", name="NegativeDefxproj_Mamba_430M_tsz512x4k_20B")
 
 
 def setup(
@@ -152,6 +152,11 @@ def main(fabric, train_data_dir, val_data_dir, resume, **overides):
     with fabric.init_module(empty_init=False):
         model = GPT(config)
         model.apply(partial(model._init_weights ,n_layer=config.n_layer))
+    
+    print("[DEBUG]Is x_proj parametrized:", torch.nn.utils.parametrize.is_parametrized(model.transformer["h"][0].mixer.x_proj))
+    print("[DEBUG]x_proj.weight shape:", model.transformer["h"][0].mixer.x_proj.weight.shape)
+    print("[DEBUG]Parametrization module:", model.transformer["h"][0].mixer.x_proj.parametrizations.weight)
+    print("[DEBUG]Wx_type:", model.transformer["h"][0].mixer.x_proj.parametrizations.weight[0].Wx_type)
  
 
     fabric.print(f"Time to instantiate model: {time.perf_counter() - t0:.02f} seconds.")
