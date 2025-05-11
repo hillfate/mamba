@@ -41,8 +41,10 @@ class PosDefiniteMamba(nn.Module):
         SD = X[:self.dt_rank, :]
         P = X[self.dt_rank:self.dt_rank+self.d_state, :]  # [d_state d_inner]
         diag = X[-self.d_state:,:][:, :1]
-        diag_softplus = F.softplus(diag) + self.threshold # - float(os.environ['CURRENT_EPOCH']) / max_epoch
-        # P_ortho = self.orthogonalize(P)
+        if self.Wx_type == "neg":
+            diag_softplus = -F.softplus(diag) - self.threshold
+        else:
+            diag_softplus = F.softplus(diag) + self.threshold
         P_triu_diag1 = torch.triu(P, diagonal=1).fill_diagonal_(1)
         SC = P_triu_diag1
         SB = diag_softplus * P_triu_diag1  # [d_state d_inner]
@@ -146,7 +148,8 @@ class Mamba(nn.Module):
             PosDefiniteMamba(
                 dt_rank=self.dt_rank,
                 d_state=self.d_state,
-                d_inner=self.d_inner
+                d_inner=self.d_inner,
+                Wx_type="neg",
             )
         )
        
@@ -247,8 +250,8 @@ class Mamba(nn.Module):
                 y, last_state = y
                 ssm_state.copy_(last_state)
             y = rearrange(y, "b d l -> b l d")
-            if self.layer_id in self.use_bigram_layers:
-                y = self.bigram_embedding(y)
+            # if self.layer_id in self.use_bigram_layers:
+            #     y = self.bigram_embedding(y)
             out = self.out_proj(y)
         return out
 
