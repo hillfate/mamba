@@ -53,6 +53,34 @@ class PosDefiniteMamba(nn.Module):
 
         return out
 
+        
+class RealEigenvalMamba(nn.Module):
+    def __init__(self, dt_rank, d_inner, d_state, orthotype="exp"):
+        super(RealEigenvalMamba, self).__init__()
+        self.dt_rank = dt_rank
+        self.d_inner = d_inner
+        self.d_state = d_state
+
+    def forward(self, X):
+        """
+            X: [dt_rank + d_state * 2, d_inner]
+            diag: [d_state]
+            out: x_proj = nn.Linear(d_inner, dt_rank + d_state * 2)
+        """
+        SD = X[:self.dt_rank, :]
+        P = X[self.dt_rank:self.dt_rank+self.d_state, :]  # [d_state d_inner]
+        diag = X[-self.d_state:,:][:, :1]
+        diag_softplus = F.softplus(diag)
+        half_ones = torch.ones_like(diag_softplus, device=diag_softplus.device)
+        half_ones[half_ones.shape[0]//2:] = -1
+        P_triu_diag1 = torch.triu(P, diagonal=1).fill_diagonal_(1)
+        SC = P_triu_diag1
+        SB = half_ones * diag_softplus * P_triu_diag1  # [d_state d_inner]
+
+        out = torch.concat([SD, SB, SC], dim=0)
+
+        return out
+
 
 class Mamba(nn.Module):
     def __init__(
@@ -142,14 +170,22 @@ class Mamba(nn.Module):
 
         self.out_proj = nn.Linear(self.d_inner, self.d_model, bias=bias, **factory_kwargs)
 
-        # Register the positive-definite parametrization on x_proj.weight
+        # # Register the positive-definite parametrization on x_proj.weight
+        # parametrize.register_parametrization(
+        #     self.x_proj, "weight",
+        #     PosDefiniteMamba(
+        #         dt_rank=self.dt_rank,
+        #         d_state=self.d_state,
+        #         d_inner=self.d_inner,
+        #         Wx_type="neg",
+        #     )
+        # )
         parametrize.register_parametrization(
             self.x_proj, "weight",
-            PosDefiniteMamba(
+            RealEigenvalMamba(
                 dt_rank=self.dt_rank,
                 d_state=self.d_state,
                 d_inner=self.d_inner,
-                Wx_type="neg",
             )
         )
        
